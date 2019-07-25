@@ -1,0 +1,165 @@
+// Carrega biblioteca Wi-Fi 
+#include <ESP8266WiFi.h>
+
+// Constantes com as credenciais da rede
+const char* nomerede = "PET";
+const char* senha    = "PETEE123";
+
+// Defini a porta do servidor 
+WiFiServer server(80);
+
+// Variável para armazenar a requisição HTTP
+String header;
+
+// constantes dos pinos utilizados
+const int ledBranco = 16;
+const int ledVermelho = 14;
+const int buzzer = 12;
+const int sensor = 0;
+
+// Variáveis auxiliares
+bool buzzerState = 0;
+int valor_analogico = 155;
+
+void setup() {
+  Serial.begin(115200);
+  
+  // Declara os pinos de saida
+  pinMode(ledBranco, OUTPUT);
+  pinMode(ledVermelho, OUTPUT);
+  pinMode(buzzer, OUTPUT);
+
+  // Declara os pinos de entrada
+  pinMode(sensor, INPUT);
+  
+  // Defini o sinal dos pinos de saida como LOW
+  digitalWrite(ledBranco, LOW);
+  digitalWrite(ledVermelho, LOW);
+  digitalWrite(buzzer, LOW);
+
+  // Conecta na rede Wi-Fi
+  Serial.print("Conectando a ");
+  Serial.println(nomerede);
+  WiFi.begin(nomerede, senha);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  
+  // Mostra o IP da rede local
+  Serial.println("");
+  Serial.println("WiFi conectado.");
+  Serial.println("Endereço IP: ");
+  Serial.println(WiFi.localIP());
+
+  // Inicia o servidor
+  server.begin();
+}
+
+void loop(){
+  WiFiClient client = server.available();   // Detecta conexão com o usuário, (client: dispositivo que fará a conexão com o servidor)
+
+  if (client) {                             // Se um cliente se conectar,
+    Serial.println("Novo Usuário");         
+    String currentLine = "";                // faz uma String para manter os dados recebidos do cliente
+    
+    while (client.connected()) {            // Enquanto o cliente estiver conectado
+      if (client.available()) {             // Se exitirem bytes para serem lidos do cliente
+        char c = client.read();             // Leia o byte
+        Serial.write(c);                    // Mostre no monitor serial
+        header += c;
+        
+        if (c == '\n') {                    // Se o byte for um caracter de nova linha
+          //Se a linha atual estiver vazia, retorna o response.
+          //Response(o que o servidor devolve ao client) do HTTP request         
+          if (currentLine.length() == 0) {
+            // HEADER do response (HEADER: conteúdo com informações sobre a o response)
+            client.println("HTTP/1.1 200 OK"); // Código de sucesso da operação
+            client.println("Content-type:text/html"); // Tipo de conteúdo do response
+            client.println("Connection: close"); // Sinalzia fim da operação 
+            client.println();
+            
+            // HTTP REQUESTS
+            // Define ações dos botões
+            if (header.indexOf("GET /sensor") >= 0){
+              valor_analogico = analogRead(sensor);
+              
+              if(valor_analogico > 400){
+                digitalWrite(ledBranco, LOW);
+                digitalWrite(ledVermelho, HIGH);
+                digitalWrite(buzzer, HIGH);
+                buzzerState = true;
+                
+              } else {
+                digitalWrite(ledBranco, HIGH);
+                digitalWrite(ledVermelho, LOW); 
+                digitalWrite(buzzer, LOW);
+                buzzerState = false;          
+              }
+              
+              Serial.print("O valor obtido do sensor foi: ");
+              Serial.println(valor_analogico);
+              
+            } else if(header.indexOf("GET /buzzer") >= 0) {
+              if(!buzzerState){
+                digitalWrite(buzzer, HIGH);
+                buzzerState = true;
+                
+              } else {
+                digitalWrite(buzzer, LOW);
+                buzzerState = false;               
+              }
+            }
+            
+            // Retorna o HTML da página
+            //HEAD
+            client.println("<!DOCTYPE html><html>");
+            client.println("<meta charset=\"UTF-8\">");
+            client.println("<head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+            client.println("<link rel=\"icon\" href=\"data:,\">");
+            client.println("<link href=\"https://fonts.googleapis.com/css?family=Oswald|Playfair+Display|Roboto+Condensed\" rel=\"stylesheet\">");
+            
+            // CSS
+            client.println("<style>html {background-color: #b5c791; font-family: 'Oswald', sans-serif; display: inline-block; margin: 0px auto; text-align: center;}");
+            client.println(".button {background-color: #3D4E32; font-family: 'Oswald', sans-serif; border: none; color: white; padding: 16px 40px;");
+            client.println("text-decoration: none; font-size: 30px; margin: 2px; cursor: pointer;}");
+            client.println(".button2 {background-color: #ffffff; font-family: 'Oswald', sans-serif;}</style></head>");
+            
+            // BODY
+            client.println("<body><h1>Sensor de gás e fumaça</h1>");
+
+            //Botão do sensor
+            client.println("<p>O valor captado no ambiente é de " + String(valor_analogico) + "</p>");
+            client.println("<p><a href=\"/sensor\"><button class=\"button\">Ativar sensor</button></a></p>");
+
+            //Botão do buzzer
+            if(buzzer){
+              client.println("<p><a href=\"/buzzer\"><button class=\"button2\">Ativar/desativar alarme</button></a></p>");
+            } else {
+              client.println("<p><a href=\"/buzzer\"><button class=\"button\">Buzzer</button></a></p>");
+            }
+            client.println("</body></html>");
+            
+            // Linha em branco
+            client.println();
+            
+            // Acaba com o loop
+            break;
+            
+          } else { // Caso contrário, limpe a linha 
+            currentLine = "";
+          }
+        } else if (c != '\r') {             // Se o byte for qualquer coisa diferente de um \r
+          currentLine += c;                 // adicione o conteúdo no fim da linha atual
+        }
+      }
+    }
+    // Limpa a variável 
+    header = "";
+    
+    // Fecha a conexão
+    client.stop();
+    Serial.println("Cliente desconectando.");
+    Serial.println("");
+  }
+}
