@@ -2,8 +2,8 @@
 #include <ESP8266WiFi.h>
 
 // Constantes com as credenciais da rede
-const char* nomerede = "PET";
-const char* senha    = "PETEE123";
+const char* nomerede = "***";
+const char* senha    = "*******";
 
 // Defini a porta do servidor 
 WiFiServer server(80);
